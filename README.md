@@ -10,11 +10,14 @@ fails. What broke before is what will break again.
 ## Build
 
 ```
-go build -o gitsecscan .
+make build          # native binary
+make dist           # dist/gitsecscan-linux-amd64 and dist/gitsecscan-darwin-arm64
+make test           # go vet + go test
 ```
 
-Go 1.26, standard library only. `git` must be on `PATH`; the repository is read
-through a single streaming `git log`, never modified.
+Go 1.26, standard library only, `CGO_ENABLED=0`, so cross-compiling needs no
+toolchain beyond Go itself. `git` must be on the host's `PATH`; the repository is
+read through a single streaming `git log`, never modified.
 
 ## Use
 
