@@ -88,6 +88,85 @@ func TestScoreIgnoresRoutineCommits(t *testing.T) {
 	}
 }
 
+func TestScoreMatchesSecurityPhraseAcrossWrappedLines(t *testing.T) {
+	s := New(DefaultConfig())
+	c := gitlog.Commit{
+		Hash:    "wrapped",
+		Subject: "limits pre-allocation while deserializing packets",
+		Body:    "This prevents memory\nexhaustion attacks from oversized input.",
+	}
+	f, ok := s.Score(c, gitlog.ModeNone)
+	if !ok {
+		t.Fatalf("wrapped security phrase was not reported (score %d, hits %+v)", f.Score, f.Hits)
+	}
+	if !hasHit(f, "resource-exhaustion") {
+		t.Errorf("resource-exhaustion did not match across line wrapping: %+v", f.Hits)
+	}
+}
+
+func TestFixBodyMaintenanceWordsDoNotDemoteShippedFix(t *testing.T) {
+	s := New(DefaultConfig())
+	c := gitlog.Commit{
+		Hash:    "body-meta",
+		Subject: "Fix panic when decoding malformed packets",
+		Body:    "Refactor the helper and add tests for the fix.",
+		Patch: `diff --git a/net/src/decode.rs b/net/src/decode.rs
+--- a/net/src/decode.rs
++++ b/net/src/decode.rs
+@@ -1 +1 @@
+-let packet = decode(data).unwrap();
++let packet = decode(data)?;
+`,
+	}
+	f, ok := s.Score(c, gitlog.ModeFull)
+	if !ok {
+		t.Fatalf("shipped fix was not reported (score %d, hits %+v)", f.Score, f.Hits)
+	}
+	if hasHit(f, "neg-refactor") || hasHit(f, "neg-test-only") {
+		t.Errorf("body-only maintenance prose demoted the fix: %+v", f.Hits)
+	}
+}
+
+func TestMaintenanceSubjectStillDoesNotQualify(t *testing.T) {
+	s := New(DefaultConfig())
+	c := gitlog.Commit{
+		Hash:    "maintenance",
+		Subject: "clippy: fix format strings and lints",
+		Patch: `diff --git a/src/lib.rs b/src/lib.rs
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1 +1 @@
+-let value = values.get(0).unwrap();
++let value = values.first().unwrap();
+`,
+	}
+	if f, ok := s.Score(c, gitlog.ModeFull); ok {
+		t.Fatalf("maintenance change was reported with score %d and hits %+v", f.Score, f.Hits)
+	}
+}
+
+func TestFeatureCommitNeedsStrongMessageEvidence(t *testing.T) {
+	s := New(DefaultConfig())
+	c := gitlog.Commit{
+		Hash:    "feature-noise",
+		Subject: "Add BLS syscall support",
+		Body:    "Validate the result and return an error instead of panicking.",
+		Patch:   securityPatch,
+	}
+	if f, ok := s.Score(c, gitlog.ModeFull); ok {
+		t.Fatalf("feature with only weak incidental vocabulary was reported with score %d and hits %+v", f.Score, f.Hits)
+	}
+}
+
+func hasHit(f Finding, id string) bool {
+	for _, h := range f.Hits {
+		if h.RuleID == id {
+			return true
+		}
+	}
+	return false
+}
+
 func TestTestOnlyChangesArePenalised(t *testing.T) {
 	s := New(DefaultConfig())
 	c := gitlog.Commit{

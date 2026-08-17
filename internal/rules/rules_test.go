@@ -55,7 +55,17 @@ func TestMessageRulesMatch(t *testing.T) {
 	}{
 		{"advisory-id", "bump deps for RUSTSEC-2024-0003", true},
 		{"advisory-id", "bump deps to latest", false},
+		{"security-advisory", "upgrade h2 due to security advisory", true},
+		{"security-labeled-update", "chore(deps): [security] bump lodash", true},
 		{"security-explicit", "security fix: clamp reader length", true},
+		{"security-explicit", "raw indexing opens attack vectors", true},
+		{"external-security-report", "https://hackerone.com/reports/991106", true},
+		{"external-security-report", "https://github.com/org/repo/security/dependabot/349", true},
+		{"external-security-report", "ordinary GitHub pull request", false},
+		{"denial-of-service", "potential DDoS against validators", true},
+		{"denial-of-service", "fix deploy command in transaction-dos", false},
+		{"memory-overflow", "prevent u64 overflow in fee calculation", true},
+		{"memory-overflow", "handle balance underflows", true},
 		{"out-of-bounds", "fix index out of range in header parser", true},
 		{"out-of-bounds", "add index to the readme", false},
 		{"use-after-free", "fix use-after-free in buffer pool", true},
@@ -65,24 +75,54 @@ func TestMessageRulesMatch(t *testing.T) {
 		{"resource-exhaustion", "cap unbounded allocation from untrusted length", true},
 		{"hang", "fix infinite loop when peer sends zero-length chunk", true},
 		{"hostile-input", "handle malformed payload without aborting", true},
+		{"hostile-input", "packets arrive from an untrusted source", true},
+		{"hostile-input", "do not panic on malformed gossip votes", true},
 		{"hostile-input", "handle payload", false},
+		{"attacker-context", "add protection against attackers", true},
 		{"fuzz-crash", "fix crash found by the fuzzer", true},
 		{"fuzz-crash", "add fuzz targets for the codec", false},
 		{"fuzz-mention", "add fuzz targets for the codec", true},
 		{"malleability", "reject non-canonical varint encodings", true},
+		{"malleability", "harden against second pre-image attacks", true},
 		{"crypto-side-channel", "use constant-time comparison for MACs", true},
 		{"crypto-key-handling", "zeroize key material on drop", true},
+		{"crypto-proof-bounds", "forbid 0-bit range proof verification", true},
 		{"authz", "fix authorization bypass in the admin route", true},
+		{"privilege-validation", "add missing owner check", true},
+		{"privilege-validation", "transaction not signed by authority", true},
+		{"privilege-validation", "improve missing default signer error", false},
 		{"race", "fix data race on the shared counter", true},
 		{"injection", "fix path traversal in the archive extractor", true},
 		{"neg-docs", "docs: explain the codec", true},
 		{"neg-revert", "Revert \"fix panic in parser\"", true},
 		{"neg-feature", "add support for BLS12-381", true},
+		{"fix-shaped", "runtime: fixes overflow handling", true},
+		{"fix-shaped", "cleanly handle balance underflow", true},
+		{"fix-shaped", "strictly sanitize snapshot contents", true},
+		{"fix-shaped", "bank: don't panic on malformed state", true},
+		{"fix-shaped", "epoch calculation resulting in duration underflow", true},
+		{"neg-mechanical-subject", "clippy: fix format strings", true},
+		{"neg-mechanical-subject", "resolve conflict", true},
+		{"neg-mechanical-subject", "reject proofs with merkle root conflicts", false},
+		{"neg-maintenance-subject", "CI: fix build", true},
+		{"neg-maintenance-subject", "fix overflow and add regression tests", false},
+		{"neg-advisory-suppression", "Add exception for RUSTSEC-2023-0001", true},
+		{"neg-advisory-suppression", "Remove ignore for RUSTSEC-2023-0001", false},
 	}
 	for _, tc := range cases {
 		if got := fires(t, tc.rule, tc.text); got != tc.want {
 			t.Errorf("rule %s on %q = %v, want %v", tc.rule, tc.text, got, tc.want)
 		}
+	}
+}
+
+func TestSubjectOnlyNegativeRulesIgnoreFixBody(t *testing.T) {
+	text := "Fix panic when decoding a packet\nRefactor the helper and add tests for the fix"
+	if fires(t, "neg-refactor", text) {
+		t.Error("neg-refactor should only classify the subject")
+	}
+	if fires(t, "neg-test-only", text) {
+		t.Error("neg-test-only should only classify the subject")
 	}
 }
 
@@ -95,6 +135,7 @@ func TestDiffRulesMatch(t *testing.T) {
 		{"add-checked-arithmetic", "let n = a.checked_add(b).ok_or(Error::Overflow)?;", true},
 		{"add-checked-arithmetic", "let n = a + b;", false},
 		{"add-rejection", "return Err(Error::InvalidLength(len));", true},
+		{"add-safe-indexing", "let item = values.get(index)?;", true},
 		{"add-constant-time", "if a.ct_eq(&b).into() {", true},
 		{"remove-panic", "let value = map.get(k).unwrap();", true},
 		{"remove-unsafe", "unsafe { ptr::copy(src, dst, n) }", true},

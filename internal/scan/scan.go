@@ -136,7 +136,9 @@ func (s *Scanner) Score(c gitlog.Commit, mode gitlog.Mode) (Finding, bool) {
 	var (
 		total       int
 		msgPositive bool
+		msgStrong   bool
 		fixShaped   bool
+		featureWork bool
 		catWeight   = map[rules.Category]int{}
 	)
 
@@ -149,21 +151,37 @@ func (s *Scanner) Score(c gitlog.Commit, mode gitlog.Mode) (Finding, bool) {
 
 	// Message scope.
 	message := c.Message()
+	// Commit bodies are prose and are commonly hard-wrapped by git clients.
+	// Match semantic rules against collapsed whitespace so phrases such as
+	// "memory exhaustion" are still recognised when the author wrapped the
+	// line between the two words. Meta rules retain the original text because
+	// their anchors deliberately distinguish subjects and individual lines.
+	normalizedMessage := strings.Join(strings.Fields(message), " ")
 	for _, r := range s.message {
-		locs := r.Pattern.FindAllStringIndex(message, s.cfg.MaxEvidence)
+		haystack := message
+		if r.Category != rules.CatMeta {
+			haystack = normalizedMessage
+		}
+		locs := r.Pattern.FindAllStringIndex(haystack, s.cfg.MaxEvidence)
 		if len(locs) == 0 {
 			continue
 		}
 		total += r.Weight
 		if r.Weight > 0 && r.Category != rules.CatMeta {
 			msgPositive = true
+			if r.Weight >= 5 {
+				msgStrong = true
+			}
 		}
 		if r.ID == rules.RuleFixShaped {
 			fixShaped = true
 		}
+		if r.ID == "neg-feature" {
+			featureWork = true
+		}
 		hit := Hit{RuleID: r.ID, Scope: r.Scope, Category: r.Category, Weight: r.Weight, Count: len(locs), Desc: r.Desc}
 		for _, loc := range locs {
-			hit.Evidence = append(hit.Evidence, truncate(strings.TrimSpace(message[loc[0]:loc[1]]), 120))
+			hit.Evidence = append(hit.Evidence, truncate(strings.TrimSpace(haystack[loc[0]:loc[1]]), 120))
 		}
 		record(hit)
 	}
@@ -249,6 +267,13 @@ func (s *Scanner) Score(c gitlog.Commit, mode gitlog.Mode) (Finding, bool) {
 	// and path signals on their own describe ordinary code: nearly every
 	// feature commit adds a `checked_add` or an error return somewhere.
 	if !msgPositive && !(fixShaped && diffPositive) {
+		return f, false
+	}
+	// Feature commits often mention validation or panics while introducing
+	// ordinary code. If the subject says this is feature work, require either
+	// explicit fix language or a strong bug/security term from the message;
+	// weak message vocabulary plus a busy diff is not enough.
+	if featureWork && !fixShaped && !msgStrong {
 		return f, false
 	}
 	return f, total >= s.cfg.MinScore

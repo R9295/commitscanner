@@ -70,7 +70,7 @@ func run() error {
 	flag.StringVar(&opts.until, "until", "", "only commits before this date")
 	flag.StringVar(&opts.author, "author", "", "only commits from authors matching this pattern")
 	flag.IntVar(&opts.max, "max", 0, "stop after this many commits (0 = all)")
-	flag.IntVar(&opts.top, "top", 40, "report at most this many findings (0 = all)")
+	flag.IntVar(&opts.top, "top", 0, "report at most this many findings (0 = all)")
 	flag.IntVar(&opts.minScore, "min-score", 0, "reporting threshold (0 = use default)")
 	flag.IntVar(&opts.highScore, "high-score", 0, "score at or above which a finding is HIGH")
 	flag.IntVar(&opts.mediumScore, "medium-score", 0, "score at or above which a finding is MEDIUM")
@@ -243,7 +243,12 @@ func scanHistory(ctx context.Context, scanner *scan.Scanner, walkOpts gitlog.Opt
 	)
 	go func() {
 		defer close(jobs)
-		walkErr = gitlog.Walk(ctx, walkOpts, func(c gitlog.Commit) error {
+		seen := make(map[string]struct{})
+		emit := func(c gitlog.Commit) error {
+			if _, ok := seen[c.Hash]; ok {
+				return nil
+			}
+			seen[c.Hash] = struct{}{}
 			scanned++
 			if !opts.quiet && scanned%500 == 0 {
 				fmt.Fprintf(os.Stderr, "\rscanned %d commits...", scanned)
@@ -254,7 +259,28 @@ func scanHistory(ctx context.Context, scanner *scan.Scanner, walkOpts gitlog.Opt
 			case <-ctx.Done():
 				return ctx.Err()
 			}
-		})
+		}
+
+		primary := walkOpts
+		// Git implements excludes as history pathspecs, so a commit that only
+		// changes an excluded lockfile disappears from this diff walk entirely.
+		// With -max, that also changes which commits the limit selects; retain
+		// exact -max semantics by accepting noisy diffs for that bounded scan.
+		if primary.Max > 0 {
+			primary.Excludes = nil
+		}
+		walkErr = gitlog.Walk(ctx, primary, emit)
+		if walkErr != nil || walkOpts.Mode == gitlog.ModeNone || len(walkOpts.Excludes) == 0 || walkOpts.Max > 0 {
+			return
+		}
+
+		// Recover message-only commits hidden by the primary walk's exclude
+		// pathspecs. Scoring them without a patch preserves security advisories
+		// that only update lockfiles while still avoiding enormous lock diffs.
+		metadata := walkOpts
+		metadata.Mode = gitlog.ModeNone
+		metadata.Excludes = nil
+		walkErr = gitlog.Walk(ctx, metadata, emit)
 	}()
 
 	go func() {

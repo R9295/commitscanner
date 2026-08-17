@@ -17,7 +17,9 @@ make test           # go vet + go test
 
 Go 1.26, standard library only, `CGO_ENABLED=0`, so cross-compiling needs no
 toolchain beyond Go itself. `git` must be on the host's `PATH`; the repository is
-read through a single streaming `git log`, never modified.
+read through streaming `git log` processes and is never modified. When diff
+exclusions are active, a fast metadata-only pass recovers commits that touched
+only an excluded file, such as a lockfile security update.
 
 ## Use
 
@@ -38,7 +40,7 @@ Notable flags:
 | `-merges` | `true` | include merge commits; `-merges=false` to skip them |
 | `-diff` | `full` | `full` reads patches, `names` reads file lists, `none` is message-only and fastest |
 | `-min-score` | 8 | reporting threshold |
-| `-top` | 40 | cap on reported findings, `0` for all |
+| `-top` | 0 | cap on reported findings, `0` for all |
 | `-format` | `text` | `text`, `json`, `md`, `threat`, or `simple` |
 | `--simple` | off | shorthand for `-format=simple` |
 | `-since` / `-until` / `-author` / `-rev` | — | passed through to `git log` |

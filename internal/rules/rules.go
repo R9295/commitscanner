@@ -61,14 +61,29 @@ func re(pattern string) *regexp.Regexp { return regexp.MustCompile(pattern) }
 // available: an author fixing a security bug usually says so.
 var messageRules = []Rule{
 	{
-		ID: "advisory-id", Scope: ScopeMessage, Category: CatAdvisory, Weight: 9,
+		ID: "advisory-id", Scope: ScopeMessage, Category: CatAdvisory, Weight: 16,
 		Pattern: re(`(?i)\b(CVE-\d{4}-\d{4,7}|GHSA-[a-z0-9]{4}-[a-z0-9]{4}-[a-z0-9]{4}|RUSTSEC-\d{4}-\d{4})\b`),
 		Desc:    "references a published advisory",
 	},
 	{
+		ID: "security-advisory", Scope: ScopeMessage, Category: CatAdvisory, Weight: 8,
+		Pattern: re(`(?i)\bsecurity advisor(y|ies)\b`),
+		Desc:    "calls out a security advisory",
+	},
+	{
+		ID: "security-labeled-update", Scope: ScopeMessage, Category: CatAdvisory, Weight: 14,
+		Pattern: re(`(?i)^([^ ]+: )?\[security\] (bump|update|upgrade|patch)\b`),
+		Desc:    "security-labelled dependency update",
+	},
+	{
 		ID: "security-explicit", Scope: ScopeMessage, Category: CatAdvisory, Weight: 6,
-		Pattern: re(`(?i)\b(security (fix|issue|bug|hole|advisory|patch|vulnerability)|vulnerabilit(y|ies)|exploitab(le|ility)|attack vector|threat model violation)\b`),
+		Pattern: re(`(?i)\b(security (fix|issue|bug|hole|advisory|patch|vulnerability)|vulnerabilit(y|ies)|exploitab(le|ility)|attack vectors?|threat model violation)\b`),
 		Desc:    "calls the change a security fix",
+	},
+	{
+		ID: "external-security-report", Scope: ScopeMessage, Category: CatAdvisory, Weight: 7,
+		Pattern: re(`(?i)(\b(hackerone\.com/reports/|bug bounty|security researcher|responsible disclosure)\b|github\.com/[^ ]+/security/(advisories|dependabot)/)`),
+		Desc:    "references an external security report",
 	},
 	{
 		ID: "audit", Scope: ScopeMessage, Category: CatAdvisory, Weight: 4,
@@ -77,8 +92,8 @@ var messageRules = []Rule{
 	},
 
 	{
-		ID: "memory-overflow", Scope: ScopeMessage, Category: CatMemory, Weight: 5,
-		Pattern: re(`(?i)\b((buffer|heap|stack|integer|arithmetic|numeric) (over|under)flow|overflow(s|ed|ing)? (on|when|during|in)|subtract with overflow|attempt to (add|subtract|multiply) with overflow)\b`),
+		ID: "memory-overflow", Scope: ScopeMessage, Category: CatMemory, Weight: 6,
+		Pattern: re(`(?i)\b((buffer|heap|stack|integer|arithmetic|numeric|u(8|16|32|64|128|size)|i(8|16|32|64|128|size)|counter|length|size|offset|index|duration( value)?|balance|calculation) (over|under)flows?|underflow(s|ed|ing)? (on|when|during|in)|overflow(s|ed|ing)? (on|when|during|in)|wraparound|subtract with overflow|attempt to (add|subtract|multiply) with overflow)\b`),
 		Desc:    "arithmetic or buffer overflow",
 	},
 	{
@@ -114,17 +129,17 @@ var messageRules = []Rule{
 	},
 	{
 		ID: "denial-of-service", Scope: ScopeMessage, Category: CatDoS, Weight: 7,
-		Pattern: re(`(?i)\b(denial[ -]of[ -]service|DoS (attack|vector|risk)?|griefing|amplification attack|resource exhaustion)\b`),
+		Pattern: re(`(?i)\b(denial[ -]of[ -]service|DDoS( (attack|vector|risk))?|DoS (attack|vector|risk|vulnerability|issue|fix)|((fix|prevent|mitigate)(es|ed|ing)? .{0,30}[[:space:]])DoS|griefing|amplification attack|resource exhaustion)\b`),
 		Desc:    "denial of service",
 	},
 	{
 		ID: "resource-exhaustion", Scope: ScopeMessage, Category: CatDoS, Weight: 6,
-		Pattern: re(`(?i)\b(OOM|out of memory|memory (exhaustion|blowup|leak)|unbounded (growth|allocation|memory|queue|buffer|channel|recursion)|allocat(e|es|ing) .{0,20}(attacker|untrusted|arbitrary)|excessive (memory|allocation))\b`),
+		Pattern: re(`(?i)\b(OOM|out of memory|memory (exhaustion|blowup|spike|leak)|unbounded (growth|allocation|memory|queue|buffer|channel|recursion)|allocat(e|es|ing) .{0,20}(attacker|untrusted|arbitrary)|excessive (memory|allocation)|giant (memory )?allocation)\b`),
 		Desc:    "unbounded resource use",
 	},
 	{
 		ID: "hang", Scope: ScopeMessage, Category: CatDoS, Weight: 5,
-		Pattern: re(`(?i)\b(infinite (loop|recursion)|stack overflow|hang(s|ing)?|deadlock|livelock|stall(s|ed|ing)?|never (terminates|completes)|busy loop)\b`),
+		Pattern: re(`(?i)\b(infinite (loop|recursion)|loop(s|ed|ing)? forever|stack overflow|hang(s|ing)?|deadlock|livelock|stall(s|ed|ing)?|stuck (on|in|while|waiting)|never (terminates|completes)|busy loop|spinning (forever|indefinitely))\b`),
 		Desc:    "hang or non-termination",
 	},
 	{
@@ -135,8 +150,13 @@ var messageRules = []Rule{
 
 	{
 		ID: "hostile-input", Scope: ScopeMessage, Category: CatValidation, Weight: 6,
-		Pattern: re(`(?i)\b(malformed|malicious|adversarial|untrusted|hostile|byzantine|corrupt(ed)?|attacker[ -]controlled) (input|data|message|payload|packet|request|response|block|proof|certificate|signature|header|peer|bytes|value|length)`),
+		Pattern: re(`(?i)\b(malformed|malicious|adversarial|untrusted|hostile|byzantine|corrupt(ed)?|attacker[ -]controlled) (input|data|message|payload|packet|request|response|block|proof|certificate|signature|header|peer|bytes|value|length|transaction|instruction|account|shred|chunk|frame|archive|source|vote|filter|collector|log|record|object|state|gossip|program)s?\b`),
 		Desc:    "handles hostile input",
+	},
+	{
+		ID: "attacker-context", Scope: ScopeMessage, Category: CatValidation, Weight: 5,
+		Pattern: re(`(?i)\b(attacker(s|'s)?|attackers'|adversar(y|ies))\b.{0,50}\b(can|could|controlled|submit|send|cause|trigger|craft|exploit)|\bprotect(ion|s|ed|ing)? against (an )?(attacker|attackers|adversary|adversaries)\b`),
+		Desc:    "describes attacker-controlled behaviour",
 	},
 	{
 		ID: "missing-validation", Scope: ScopeMessage, Category: CatValidation, Weight: 4,
@@ -155,7 +175,7 @@ var messageRules = []Rule{
 	},
 	{
 		ID: "malleability", Scope: ScopeMessage, Category: CatValidation, Weight: 5,
-		Pattern: re(`(?i)\b(malleab(le|ility)|non[ -]canonical|canonical(ity|ization)|ambiguous encoding|duplicate (key|entry|element) (accepted|allowed)|second preimage)\b`),
+		Pattern: re(`(?i)\b(malleab(le|ility)|non[ -]canonical|canonical(ity|ization)|ambiguous encoding|duplicate (key|entry|element) (accepted|allowed)|second[ -]pre[ -]?image( attacks?)?)\b`),
 		Desc:    "encoding malleability",
 	},
 
@@ -174,6 +194,11 @@ var messageRules = []Rule{
 		Pattern: re(`(?i)\b(signature|proof|certificate|merkle|commitment|mac|hmac|hash|digest|threshold share)\b.{0,50}\b(forg(e|ed|ery)|bypass|not (verified|checked|validated)|missing (verification|check)|always (true|succeeds)|accepted? without|skipped)`),
 		Desc:    "verification gap",
 	},
+	{
+		ID: "crypto-proof-bounds", Scope: ScopeMessage, Category: CatCrypto, Weight: 6,
+		Pattern: re(`(?i)\b(0[ -]bit range proof|zero[ -]bit range proof|range proof (generator )?(length|size|bound)|proof generator (length|size|bound))\b`),
+		Desc:    "bounds cryptographic proof generation or verification",
+	},
 
 	{
 		ID: "authz", Scope: ScopeMessage, Category: CatAuthz, Weight: 8,
@@ -181,8 +206,13 @@ var messageRules = []Rule{
 		Desc:    "access control",
 	},
 	{
+		ID: "privilege-validation", Scope: ScopeMessage, Category: CatAuthz, Weight: 8,
+		Pattern: re(`(?i)\b(missing|omit(ted)?|bypass(ed|es|ing)?|fail(s|ed)? to (check|verify|validate)) (the )?(owner(ship)?|signer|signature|writable|authority|permission|privilege)( (check|validation|verification))?\b|\b(owner(ship)?|signer|signature|writable|authority|permission|privilege) (check|validation|verification) (is |was )?(missing|omitted|bypassed)|\bnot signed by (the )?authority\b|\b(writable|signer) privilege(s)?\b`),
+		Desc:    "missing ownership, signer, or privilege validation",
+	},
+	{
 		ID: "consensus-safety", Scope: ScopeMessage, Category: CatAuthz, Weight: 6,
-		Pattern: re(`(?i)\b(replay (attack|protection)|equivocat(e|ion|ing)|double[ -](spend|sign|vote|propose)|safety violation|liveness (bug|violation|failure)|fork(ing)? (attack|the chain)|eclipse attack|sybil)\b`),
+		Pattern: re(`(?i)\b(replay (attack|protection)|equivocat(e|ion|ing)|double[ -](spend|sign|vote|propose)|safety violation|liveness (bug|violation|failure)|fork(ing)? (attack|the chain)|eclipse attacks?|sybil)\b`),
 		Desc:    "protocol safety or liveness",
 	},
 
@@ -213,7 +243,7 @@ var messageRules = []Rule{
 	// Meta rules shape the score without asserting a bug class of their own.
 	{
 		ID: "fix-shaped", Scope: ScopeMessage, Category: CatMeta, Weight: 2,
-		Pattern: re(`(?i)(^|\n)\s*(\[[^\]]+\]\s*)?(fix|fixes|fixed|prevent|reject|guard|harden|correct|patch|avoid|handle|bound|limit|clamp)\b`),
+		Pattern: re(`(?i)((^|\n)\s*(\[[^\]]+\]\s*|[a-z0-9_.-]+(\([^)]*\))?[!:]\s*)?((cleanly|correctly|properly|safely|gracefully|strictly|explicitly)\s+)?(fix(es|ed|ing)?|prevent(s|ed|ing)?|reject(s|ed|ing)?|guard(s|ed|ing)?|harden(s|ed|ing)?|correct(s|ed|ing)?|patch(es|ed|ing)?|avoid(s|ed|ing)?|handle(s|d|ing)?|bound(s|ed|ing)?|limit(s|ed|ing)?|clamp(s|ed|ing)?|restrict(s|ed|ing)?|resolve(s|d|ing)?|sanitiz(e|es|ed|ing)|enforce(s|d|ing)?|ensure(s|d|ing)?|forbid(s|den|ding)?|disallow(s|ed|ing)?|don'?t panic|do not panic|no longer panic)\b|^[^\n]{0,120}\b(result(s|ed|ing)? in|caus(e|es|ed|ing))\b)`),
 		Desc:    "phrased as a fix",
 	},
 	{
@@ -223,13 +253,28 @@ var messageRules = []Rule{
 	},
 	{
 		ID: "neg-refactor", Scope: ScopeMessage, Category: CatMeta, Weight: -4,
-		Pattern: re(`(?i)\b(refactor(ing)?|rename(s|d)?|clean ?up|reorganiz|re-?structure|formatting|rustfmt|clippy|style nit|dead code|simplif(y|ies|ied))\b`),
+		Pattern: re(`(?i)^\s*(\[[^\]]+\]\s*|[a-z0-9_.-]+(\([^)]*\))?[!:]\s*)?(refactor(ing)?|rename(s|d)?|clean ?up|reorganiz|re-?structure|format(ting)?|rustfmt|clippy|style nit|remove dead code|simplif(y|ies|ied))\b`),
 		Desc:    "refactor or cleanup",
 	},
 	{
 		ID: "neg-test-only", Scope: ScopeMessage, Category: CatMeta, Weight: -3,
-		Pattern: re(`(?i)^\s*(\[[^\]]+\]\s*)?(bench(mark)?s?|tests?|ci|chore|build|deps)\b|\badd(s|ed|ing)? (a |more )?(unit |integration )?(test|benchmark)s?\b`),
+		Pattern: re(`(?i)^\s*(\[[^\]]+\]\s*|[a-z0-9_.-]+(\([^)]*\))?[!:]\s*)?(bench(mark)?s?|tests?|ci|chore|build|deps)\b`),
 		Desc:    "test, bench, or CI change",
+	},
+	{
+		ID: "neg-maintenance-subject", Scope: ScopeMessage, Category: CatMeta, Weight: -5,
+		Pattern: re(`(?i)^[^\n]{0,160}\b(CI|build|compile)\b`),
+		Desc:    "subject describes maintenance or test work",
+	},
+	{
+		ID: "neg-mechanical-subject", Scope: ScopeMessage, Category: CatMeta, Weight: -8,
+		Pattern: re(`(?i)^[^\n]{0,160}(\b(typos?|clippy|lints?|format(ting| strings?)?|warnings?|review comments|rebase|merge conflicts?)\b|\bresolve conflict\b)`),
+		Desc:    "subject describes a mechanical change",
+	},
+	{
+		ID: "neg-advisory-suppression", Scope: ScopeMessage, Category: CatMeta, Weight: -12,
+		Pattern: re(`(?i)^\s*(\[[^\]]+\]\s*|[a-z0-9_.-]+(\([^)]*\))?[!:]\s*)?((ignore|allowlist|suppress)(d|es|ing)?|add (an )?exception for)\b.{0,80}\b(RUSTSEC|CVE|GHSA|advisory|audit)\b|^\s*add\b.{0,50}\b(RUSTSEC|CVE|GHSA)\b.{0,30}\b(audit )?ignores\b`),
+		Desc:    "suppresses rather than fixes an advisory",
 	},
 	{
 		ID: "neg-feature", Scope: ScopeMessage, Category: CatMeta, Weight: -3,
@@ -255,6 +300,11 @@ var diffRules = []Rule{
 		ID: "add-fallible-conversion", Scope: ScopeAdded, Category: CatValidation, Weight: 2,
 		Pattern: re(`\b(try_from|try_into|TryFrom|TryInto)\b`),
 		Desc:    "adds a fallible conversion",
+	},
+	{
+		ID: "add-safe-indexing", Scope: ScopeAdded, Category: CatValidation, Weight: 2,
+		Pattern: re(`\.(get|get_mut|first|first_mut|last|last_mut)\s*\(`),
+		Desc:    "adds bounds-checked indexing",
 	},
 	{
 		ID: "add-limit", Scope: ScopeAdded, Category: CatDoS, Weight: 3,
