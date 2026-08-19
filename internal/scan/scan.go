@@ -15,15 +15,6 @@ import (
 	"gitsecscan/internal/rules"
 )
 
-// Tier is a coarse confidence bucket.
-type Tier string
-
-const (
-	TierHigh   Tier = "HIGH"
-	TierMedium Tier = "MEDIUM"
-	TierLow    Tier = "LOW"
-)
-
 // Hit records that one rule matched, and what it matched on.
 type Hit struct {
 	RuleID   string         `json:"rule"`
@@ -41,20 +32,21 @@ type Hit struct {
 // description of the bug they fixed, and it is the part of a finding worth
 // feeding into a threat model. Everything else is provenance.
 type Finding struct {
-	Hash       string    `json:"hash"`
-	Short      string    `json:"short"`
-	Author     string    `json:"author"`
-	Date       time.Time `json:"date"`
-	Subject    string    `json:"subject"`
-	Message    string    `json:"message"`
-	Score      int       `json:"score"`
-	Tier       Tier      `json:"tier"`
-	Categories []string  `json:"categories"`
-	Subsystems []string  `json:"subsystems,omitempty"`
-	Hits       []Hit     `json:"hits"`
-	Files      []string  `json:"files,omitempty"`
-	FileCount  int       `json:"file_count,omitempty"`
-	Truncated  bool      `json:"truncated,omitempty"`
+	Hash    string    `json:"hash"`
+	Short   string    `json:"short"`
+	Author  string    `json:"author"`
+	Date    time.Time `json:"date"`
+	Subject string    `json:"subject"`
+	Message string    `json:"message"`
+	// Score measures how strongly the commit matched the selection rules. It
+	// ranks relevance only; it is not an assessment of severity or impact.
+	Score      int      `json:"score"`
+	Categories []string `json:"categories"`
+	Subsystems []string `json:"subsystems,omitempty"`
+	Hits       []Hit    `json:"hits"`
+	Files      []string `json:"files,omitempty"`
+	FileCount  int      `json:"file_count,omitempty"`
+	Truncated  bool     `json:"truncated,omitempty"`
 }
 
 // Config tunes scoring.
@@ -63,9 +55,6 @@ type Config struct {
 
 	// MinScore is the reporting threshold.
 	MinScore int
-	// HighScore and MediumScore are the tier boundaries.
-	HighScore   int
-	MediumScore int
 
 	// PathCap and DiffCap bound how much weight the weaker path and diff
 	// signals can contribute, so message evidence stays dominant.
@@ -83,8 +72,6 @@ func DefaultConfig() Config {
 	return Config{
 		Rules:       rules.Default(),
 		MinScore:    8,
-		HighScore:   14,
-		MediumScore: 10,
 		PathCap:     3,
 		DiffCap:     9,
 		MaxEvidence: 3,
@@ -258,7 +245,6 @@ func (s *Scanner) Score(c gitlog.Commit, mode gitlog.Mode) (Finding, bool) {
 		f.Files = f.Files[:s.cfg.MaxFiles]
 	}
 	f.Categories = rankCategories(catWeight)
-	f.Tier = tierFor(total, s.cfg)
 
 	sort.SliceStable(f.Hits, func(i, j int) bool { return f.Hits[i].Weight > f.Hits[j].Weight })
 
@@ -277,17 +263,6 @@ func (s *Scanner) Score(c gitlog.Commit, mode gitlog.Mode) (Finding, bool) {
 		return f, false
 	}
 	return f, total >= s.cfg.MinScore
-}
-
-func tierFor(score int, cfg Config) Tier {
-	switch {
-	case score >= cfg.HighScore:
-		return TierHigh
-	case score >= cfg.MediumScore:
-		return TierMedium
-	default:
-		return TierLow
-	}
 }
 
 func rankCategories(weights map[rules.Category]int) []string {

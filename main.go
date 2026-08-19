@@ -46,8 +46,6 @@ type options struct {
 	max           int
 	top           int
 	minScore      int
-	highScore     int
-	mediumScore   int
 	diffMode      string
 	format        string
 	simple        bool
@@ -72,8 +70,6 @@ func run() error {
 	flag.IntVar(&opts.max, "max", 0, "stop after this many commits (0 = all)")
 	flag.IntVar(&opts.top, "top", 0, "report at most this many findings (0 = all)")
 	flag.IntVar(&opts.minScore, "min-score", 0, "reporting threshold (0 = use default)")
-	flag.IntVar(&opts.highScore, "high-score", 0, "score at or above which a finding is HIGH")
-	flag.IntVar(&opts.mediumScore, "medium-score", 0, "score at or above which a finding is MEDIUM")
 	flag.StringVar(&opts.diffMode, "diff", "full", "how much diff to read: full, names, or none")
 	flag.StringVar(&opts.format, "format", "text", "output format: text, json, md, threat, or simple")
 	flag.BoolVar(&opts.simple, "simple", false, "shorthand for -format=simple: hash,category then the commit message")
@@ -112,12 +108,6 @@ func run() error {
 	cfg := scan.DefaultConfig()
 	if opts.minScore > 0 {
 		cfg.MinScore = opts.minScore
-	}
-	if opts.highScore > 0 {
-		cfg.HighScore = opts.highScore
-	}
-	if opts.mediumScore > 0 {
-		cfg.MediumScore = opts.mediumScore
 	}
 	scanner := scan.New(cfg)
 

@@ -73,8 +73,9 @@ feature work. Two structural rules matter more than any single weight:
    line reads exactly like a security fix. Those entries are penalised and
    labelled `scope: test/fuzz code only`.
 
-Path and diff contributions are capped so message evidence stays dominant.
-Tiers are `HIGH` (>= 14), `MEDIUM` (>= 10), `LOW` (>= 8) by default.
+Path and diff contributions are capped so message evidence stays dominant. The
+score is only a heuristic measure of how strongly a commit matched the selection
+rules; it is not a severity or impact assessment. Severity is left to the user.
 
 ## Output
 
@@ -88,7 +89,6 @@ implemented the fix:
 - commit: `a68f75ec78bab93e551637f4799acc7b539f4f1a` (2025-10-09)
 - bug class: memory-safety, input-validation, dos
 - subsystem: storage, examples
-- confidence: HIGH (score 19)
 
 **What the author said:**
 ...

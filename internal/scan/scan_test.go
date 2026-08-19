@@ -38,9 +38,6 @@ func TestScoreSecurityFix(t *testing.T) {
 	if !ok {
 		t.Fatalf("security fix was not reported (score %d)", f.Score)
 	}
-	if f.Tier != TierHigh {
-		t.Errorf("tier = %s (score %d), want HIGH", f.Tier, f.Score)
-	}
 	if len(f.Categories) == 0 {
 		t.Fatal("no categories assigned")
 	}

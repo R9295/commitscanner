@@ -53,7 +53,6 @@ func TestThreatFlagsHarnessOnlyFixes(t *testing.T) {
 		Subject:    "fix panic in fuzz test",
 		Message:    "fix panic in fuzz test",
 		Categories: []string{"dos"},
-		Tier:       scan.TierMedium,
 		Hits:       []scan.Hit{{RuleID: scan.RuleTestOnly, Weight: -8}},
 	}
 	var buf bytes.Buffer
@@ -62,5 +61,44 @@ func TestThreatFlagsHarnessOnlyFixes(t *testing.T) {
 	}
 	if !strings.Contains(buf.String(), "never shipped") {
 		t.Errorf("harness-only fix was not flagged:\n%s", buf.String())
+	}
+	if strings.Contains(buf.String(), "confidence") || strings.Contains(buf.String(), "score") {
+		t.Errorf("threat output contains a severity or score assessment:\n%s", buf.String())
+	}
+}
+
+func TestMachineAndHumanReportsDoNotAssessSeverity(t *testing.T) {
+	f := scan.Finding{
+		Hash:       "abc",
+		Short:      "abc",
+		Subject:    "fix overflow",
+		Message:    "fix overflow",
+		Score:      12,
+		Categories: []string{"memory-safety"},
+	}
+	sum := Build(Summary{Repo: "r", Revision: "HEAD", MinScore: 8}, []scan.Finding{f})
+
+	for name, render := range map[string]func(*bytes.Buffer) error{
+		"json": func(buf *bytes.Buffer) error { return JSON(buf, []scan.Finding{f}, sum) },
+		"text": func(buf *bytes.Buffer) error { return Text(buf, []scan.Finding{f}, sum) },
+		"markdown": func(buf *bytes.Buffer) error {
+			return Markdown(buf, []scan.Finding{f}, sum)
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var buf bytes.Buffer
+			if err := render(&buf); err != nil {
+				t.Fatalf("render: %v", err)
+			}
+			lower := strings.ToLower(buf.String())
+			for _, forbidden := range []string{"\"tier\"", "by_tier", "confidence", "severity"} {
+				if strings.Contains(lower, forbidden) {
+					t.Errorf("output contains severity field %q:\n%s", forbidden, buf.String())
+				}
+			}
+			if !strings.Contains(lower, "score") && name != "text" {
+				t.Errorf("output lost the relevance score:\n%s", buf.String())
+			}
+		})
 	}
 }

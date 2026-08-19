@@ -22,7 +22,6 @@ type Summary struct {
 	Reported   int            `json:"commits_reported"`
 	MinScore   int            `json:"min_score"`
 	Elapsed    string         `json:"elapsed"`
-	ByTier     map[string]int `json:"by_tier"`
 	ByCategory map[string]int `json:"by_category"`
 	FirstDate  time.Time      `json:"first_commit_date,omitempty"`
 	LastDate   time.Time      `json:"last_commit_date,omitempty"`
@@ -31,10 +30,8 @@ type Summary struct {
 // Build computes summary counters from the findings.
 func Build(base Summary, findings []scan.Finding) Summary {
 	base.Reported = len(findings)
-	base.ByTier = map[string]int{}
 	base.ByCategory = map[string]int{}
 	for _, f := range findings {
-		base.ByTier[string(f.Tier)]++
 		for _, c := range f.Categories {
 			base.ByCategory[c]++
 		}
@@ -53,8 +50,8 @@ func Text(w io.Writer, findings []scan.Finding, sum Summary) error {
 
 	for i, f := range findings {
 		fmt.Fprintf(w, "%s\n", strings.Repeat("-", 78))
-		fmt.Fprintf(w, "#%-3d score %-3d %-6s  %s  %s  %s\n",
-			i+1, f.Score, f.Tier, f.Short, f.Date.Format("2006-01-02"), f.Author)
+		fmt.Fprintf(w, "#%-3d match %-3d  %s  %s  %s\n",
+			i+1, f.Score, f.Short, f.Date.Format("2006-01-02"), f.Author)
 		fmt.Fprintf(w, "     %s\n", f.Subject)
 		for _, line := range bodyLines(f, 12) {
 			fmt.Fprintf(w, "     | %s\n", line)
@@ -84,8 +81,7 @@ func Text(w io.Writer, findings []scan.Finding, sum Summary) error {
 
 	fmt.Fprintf(w, "%s\n", strings.Repeat("=", 78))
 	fmt.Fprintf(w, "summary\n")
-	writeCounts(w, "  by tier    ", sum.ByTier, []string{"HIGH", "MEDIUM", "LOW"})
-	writeCounts(w, "  by category", sum.ByCategory, nil)
+	writeCounts(w, "  by category", sum.ByCategory)
 	return nil
 }
 
@@ -141,22 +137,20 @@ func bodyLines(f scan.Finding, max int) []string {
 	return out
 }
 
-func writeCounts(w io.Writer, label string, counts map[string]int, order []string) {
+func writeCounts(w io.Writer, label string, counts map[string]int) {
 	if len(counts) == 0 {
 		return
 	}
-	keys := order
-	if keys == nil {
-		for k := range counts {
-			keys = append(keys, k)
-		}
-		sort.Slice(keys, func(i, j int) bool {
-			if counts[keys[i]] != counts[keys[j]] {
-				return counts[keys[i]] > counts[keys[j]]
-			}
-			return keys[i] < keys[j]
-		})
+	var keys []string
+	for k := range counts {
+		keys = append(keys, k)
 	}
+	sort.Slice(keys, func(i, j int) bool {
+		if counts[keys[i]] != counts[keys[j]] {
+			return counts[keys[i]] > counts[keys[j]]
+		}
+		return keys[i] < keys[j]
+	})
 	var parts []string
 	for _, k := range keys {
 		if counts[k] > 0 {
@@ -217,7 +211,6 @@ func Threat(w io.Writer, findings []scan.Finding, sum Summary) error {
 		if len(f.Subsystems) > 0 {
 			fmt.Fprintf(w, "- subsystem: %s\n", strings.Join(f.Subsystems, ", "))
 		}
-		fmt.Fprintf(w, "- confidence: %s (score %d)\n", f.Tier, f.Score)
 		if testOnly(f) {
 			fmt.Fprintf(w, "- scope: test/fuzz code only, so this defect never shipped\n")
 		}
@@ -310,18 +303,18 @@ func Markdown(w io.Writer, findings []scan.Finding, sum Summary) error {
 	}
 	fmt.Fprintln(w)
 
-	fmt.Fprintf(w, "| # | score | tier | commit | date | categories | subject |\n")
-	fmt.Fprintf(w, "|---|-------|------|--------|------|------------|---------|\n")
+	fmt.Fprintf(w, "| # | match score | commit | date | categories | subject |\n")
+	fmt.Fprintf(w, "|---|-------------|--------|------|------------|---------|\n")
 	for i, f := range findings {
-		fmt.Fprintf(w, "| %d | %d | %s | `%s` | %s | %s | %s |\n",
-			i+1, f.Score, f.Tier, f.Short, f.Date.Format("2006-01-02"),
+		fmt.Fprintf(w, "| %d | %d | `%s` | %s | %s | %s |\n",
+			i+1, f.Score, f.Short, f.Date.Format("2006-01-02"),
 			strings.Join(f.Categories, ", "), escapePipes(f.Subject))
 	}
 
 	fmt.Fprintf(w, "\n## Details\n\n")
 	for i, f := range findings {
 		fmt.Fprintf(w, "### %d. `%s` — %s\n\n", i+1, f.Short, escapePipes(f.Subject))
-		fmt.Fprintf(w, "score %d (%s), %s, %s\n\n", f.Score, f.Tier, f.Date.Format("2006-01-02"), f.Author)
+		fmt.Fprintf(w, "match score %d, %s, %s\n\n", f.Score, f.Date.Format("2006-01-02"), f.Author)
 		for _, h := range f.Hits {
 			fmt.Fprintf(w, "- `%+d` **%s** (%s) — %s\n", h.Weight, h.RuleID, h.Scope, h.Desc)
 			for _, e := range h.Evidence {
